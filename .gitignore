@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.env
+.venv
+env/
+venv/
+sna_env/
+
+# Data (large raw files — don't push to GitHub)
+data/raw/*.jsonl
+data/processed/*.parquet
+data/processed/*.pkl
+data/processed/graphs/*.pkl
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Large generated files
+figures/*.png
+figures/gephi_exports/*.gexf

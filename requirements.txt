@@ -1,0 +1,14 @@
+networkx>=3.2
+python-louvain>=0.16
+community>=1.0.0b1
+matplotlib>=3.7
+pandas>=2.0
+numpy>=1.24
+seaborn>=0.13
+scipy>=1.11
+tqdm>=4.65
+requests>=2.31
+jupyter>=1.0
+notebook>=7.0
+plotly>=5.18
+zstandard>=0.21

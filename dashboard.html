@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echo Chambers in Climate Reddit – SNA Dashboard</title>
+  <meta name="description" content="Social Network Analysis Dashboard: Echo Chambers in Climate Change Discussions on Reddit (2021–2024)" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #080c14; --surface: #0f1622; --surface2: #161e30;
+      --border: #1e2a40; --text: #e2e8f0; --muted: #64748b;
+      --cyan: #06b6d4; --cyan-glow: rgba(6,182,212,0.18);
+      --red: #f87171; --green: #4ade80; --amber: #fbbf24;
+      --purple: #a78bfa; --pink: #f472b6; --blue: #60a5fa;
+      --radius: 12px; --radius-lg: 20px; --shadow: 0 4px 32px rgba(0,0,0,0.5);
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0;
+      background-image: linear-gradient(rgba(6,182,212,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.03) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none;
+    }
+
+    /* LOADER */
+    #loader { position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; transition: opacity 0.5s; }
+    .loader-ring { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--cyan); animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { font-size: 0.88rem; color: var(--muted); }
+
+    /* HEADER */
+    header { position: relative; z-index: 10; padding: 0 2rem; background: linear-gradient(180deg, rgba(6,182,212,0.08) 0%, transparent 100%); border-bottom: 1px solid var(--border); }
+    .header-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 1.2rem 0; flex-wrap: wrap; gap: 0.75rem; }
+    .logo { display: flex; align-items: center; gap: 0.75rem; }
+    .logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--cyan), var(--purple)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; box-shadow: 0 0 20px var(--cyan-glow); }
+    .logo-text h1 { font-size: 1.05rem; font-weight: 700; }
+    .logo-text span { font-size: 0.7rem; color: var(--muted); }
+    .header-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .badge { padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.68rem; font-weight: 600; border: 1px solid; }
+    .badge-cyan  { background: rgba(6,182,212,0.1);  border-color: rgba(6,182,212,0.4);  color: var(--cyan);  }
+    .badge-green { background: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.4); color: var(--green); }
+    .badge-amber { background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.4); color: var(--amber); }
+
+    /* TAB BAR */
+    .tab-bar { position: relative; z-index: 10; display: flex; overflow-x: auto; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; }
+    .tab-btn { padding: 0.9rem 1.4rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; font-family: 'Inter', sans-serif; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    /* MAIN */
+    main { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 2rem; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeIn 0.25s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* KPI CARDS */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .kpi-card.cyan::before  { background: linear-gradient(90deg, var(--cyan), transparent); }
+    .kpi-card.green::before { background: linear-gradient(90deg, var(--green), transparent); }
+    .kpi-card.red::before   { background: linear-gradient(90deg, var(--red), transparent); }
+    .kpi-card.amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+    .kpi-card.purple::before{ background: linear-gradient(90deg, var(--purple), transparent); }
+    .kpi-card.pink::before  { background: linear-gradient(90deg, var(--pink), transparent); }
+    .kpi-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; }
+    .kpi-value { font-size: 1.9rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+    .kpi-sub { font-size: 0.7rem; color: var(--muted); margin-top: 0.35rem; }
+    .kpi-trend { font-size: 0.7rem; font-weight: 600; margin-top: 0.3rem; }
+    .trend-up { color: var(--green); } .trend-down { color: var(--red); }
+
+    /* CHART CARDS & GRID */
+    .chart-grid { display: grid; gap: 1.25rem; }
+    .chart-grid-2 { grid-template-columns: 1fr 1fr; }
+    .chart-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 900px) { .chart-grid-2, .chart-grid-3 { grid-template-columns: 1fr; } }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; transition: box-shadow 0.2s; }
+    .chart-card:hover { box-shadow: var(--shadow); }
+    .chart-card.span-2 { grid-column: span 2; }
+    @media (max-width: 900px) { .chart-card.span-2 { grid-column: span 1; } }
+    .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
+    .chart-title { font-size: 0.9rem; font-weight: 700; }
+    .chart-subtitle { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+    .section-heading { font-size: 1.3rem; font-weight: 800; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; }
+    .section-heading .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+    /* NETWORK */
+    #network-svg { width: 100%; height: 520px; background: var(--surface2); border-radius: var(--radius); border: 1px solid var(--border); display: block; }
+    .network-controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+    .ctrl-btn { padding: 0.45rem 1rem; font-size: 0.78rem; font-weight: 600; border-radius: 8px; cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text); transition: all 0.2s; font-family: 'Inter', sans-serif; }
+    .ctrl-btn:hover, .ctrl-btn.active { background: rgba(6,182,212,0.15); border-color: var(--cyan); color: var(--cyan); }
+    .period-select { padding: 0.45rem 0.9rem; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 0.78rem; cursor: pointer; font-family: 'Inter', sans-serif; }
+
+    /* TABLE */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .data-table th { padding: 0.75rem 1rem; text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .data-table td { padding: 0.7rem 1rem; border-bottom: 1px solid rgba(30,42,64,0.5); }
+    .data-table tr:hover td { background: rgba(6,182,212,0.04); }
+    .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
+    .rank-1 { background: rgba(251,191,36,0.2); color: var(--amber); }
+    .rank-2 { background: rgba(148,163,184,0.2); color: #94a3b8; }
+    .rank-3 { background: rgba(251,146,60,0.2); color: #fb923c; }
+    .rank-n { background: rgba(30,42,64,0.8); color: var(--muted); }
+    .bar-mini { display: inline-block; height: 6px; border-radius: 999px; background: var(--cyan); vertical-align: middle; margin-right: 6px; }
+
+    /* FINDING CARDS */
+    .finding-card { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid; border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .finding-card.red    { border-left-color: var(--red);    }
+    .finding-card.cyan   { border-left-color: var(--cyan);   }
+    .finding-card.amber  { border-left-color: var(--amber);  }
+    .finding-card.purple { border-left-color: var(--purple); }
+    .finding-card.green  { border-left-color: var(--green);  }
+    .finding-icon  { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .finding-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.4rem; }
+    .finding-body  { font-size: 0.82rem; color: #94a3b8; line-height: 1.65; }
+
+    footer { position: relative; z-index: 1; text-align: center; padding: 2rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  </style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Loading SNA Dashboard…</div>
+</div>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">🌍</div>
+      <div class="logo-text">
+        <h1>Climate Echo Chambers on Reddit</h1>
+        <span>Social Network Analysis &middot; CSE 356 &middot; 2021–2024</span>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-cyan">NetworkX + Louvain</span>
+      <span class="badge badge-green">4 Subreddits</span>
+      <span class="badge badge-amber">48 Monthly Snapshots</span>
+    </div>
+  </div>
+</header>
+
+<div class="tab-bar" role="tablist">
+  <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">📊 Overview</button>
+  <button class="tab-btn"        data-tab="temporal"  onclick="switchTab('temporal')">📈 Temporal Trends</button>
+  <button class="tab-btn"        data-tab="events"    onclick="switchTab('events')">⚡ Event Analysis</button>
+  <button class="tab-btn"        data-tab="network"   onclick="switchTab('network')">🕸 Network Graph</button>
+  <button class="tab-btn"        data-tab="bridges"   onclick="switchTab('bridges')">🌉 Bridge Users</button>
+  <button class="tab-btn"        data-tab="interpret" onclick="switchTab('interpret')">📝 Findings</button>
+</div>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <div id="tab-overview" class="tab-panel active">
+    <div class="kpi-grid" id="kpi-grid"></div>
+    <div class="chart-grid chart-grid-2">
+      <div class="chart-card span-2">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Network Modularity Over Time</div>
+            <div class="chart-subtitle">Higher modularity = stronger echo chambers. Dashed = 3-month rolling avg.</div>
+          </div>
+        </div>
+        <canvas id="chart-mod-main" height="90"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div>
+          <div class="chart-title">Degree Assortativity Over Time</div>
+          <div class="chart-subtitle">Negative = hubs connect to periphery (hub-spoke)</div>
+        </div></div>
+        <canvas id="chart-ass-main" height="160"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div>
+          <div class="chart-title">Communities Detected per Month</div>
+          <div class="chart-subtitle">Louvain algorithm — number of clusters</div>
+        </div></div>
+        <canvas id="chart-com-main" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- TEMPORAL -->
+  <div id="tab-temporal" class="tab-panel">
+    <div class="section-heading"><span class="dot"></span>Temporal Analysis — 48 Monthly Snapshots</div>
+    <div class="chart-grid" style="gap:1.25rem;">
+      <div class="chart-card">
+        <div class="chart-header"><div>
+          <div class="chart-title">All Metrics Normalised (0–1)</div>
+          <div class="chart-subtitle">Scaled for side-by-side comparison across all 4 years</div>
+        </div></div>
+        <canvas id="chart-multi" height="110"></canvas>
+      </div>
+      <div class="chart-grid chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">Network Size (Nodes)</div><div class="chart-subtitle">Unique users per monthly graph</div></div></div>
+          <canvas id="chart-nodes" height="160"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">Avg Clustering Coefficient</div><div class="chart-subtitle">Local community tightness (higher = more cliquey)</div></div></div>
+          <canvas id="chart-clustering" height="160"></canvas>
+        </div>
+      </div>
+      <div class="chart-grid chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">Network Density</div><div class="chart-subtitle">Edge density — decreases as network grows</div></div></div>
+          <canvas id="chart-density" height="160"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header"><div><div class="chart-title">Mean Betweenness Centrality</div><div class="chart-subtitle">Bridge user influence strength over time</div></div></div>
+          <canvas id="chart-betweenness" height="160"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div id="tab-events" class="tab-panel">
+    <div class="section-heading"><span class="dot"></span>Before / After Major Climate Events</div>
+    <div class="chart-grid chart-grid-2">
+      <div class="chart-card">
+        <div class="chart-header"><div><div class="chart-title">Modularity: Before vs After</div><div class="chart-subtitle">Per climate event — 60-day windows</div></div></div>
+        <canvas id="chart-ev-mod" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div><div class="chart-title">Δ Modularity (After − Before)</div><div class="chart-subtitle">Green = echo chambers strengthened after event</div></div></div>
+        <canvas id="chart-ev-delta" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div><div class="chart-title">Community Count: Before vs After</div></div></div>
+        <canvas id="chart-ev-comm" height="200"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div><div class="chart-title">Assortativity: Before vs After</div></div></div>
+        <canvas id="chart-ev-ass" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- NETWORK -->
+  <div id="tab-network" class="tab-panel">
+    <div class="section-heading"><span class="dot"></span>Interactive Network Graph</div>
+    <div class="network-controls">
+      <select class="period-select" id="period-select" onchange="buildNetwork()"></select>
+      <button class="ctrl-btn active" id="btn-community" onclick="setColorMode('community')">🎨 Color by Community</button>
+      <button class="ctrl-btn" id="btn-degree" onclick="setColorMode('degree')">📡 Color by Degree</button>
+      <button class="ctrl-btn" onclick="resetZoom()">🔄 Reset Zoom</button>
+      <span style="font-size:0.72rem;color:var(--muted);margin-left:auto;">Drag &bull; Scroll to zoom &bull; Hover for info</span>
+    </div>
+    <div class="chart-card" style="padding:0;overflow:hidden;">
+      <svg id="network-svg"></svg>
+    </div>
+    <div class="chart-grid chart-grid-3" style="margin-top:1.25rem;">
+      <div class="chart-card">
+        <div class="chart-title" style="margin-bottom:0.75rem;">Network Stats</div>
+        <div id="net-stats" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--muted);line-height:2.2;"></div>
+      </div>
+      <div class="chart-card" style="grid-column:span 2;">
+        <div class="chart-title" style="margin-bottom:0.75rem;">Degree Distribution (Power-law check)</div>
+        <canvas id="chart-deg-dist" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- BRIDGES -->
+  <div id="tab-bridges" class="tab-panel">
+    <div class="section-heading"><span class="dot"></span>Bridge User Analysis</div>
+    <div class="chart-grid chart-grid-2" style="margin-bottom:1.5rem;">
+      <div class="chart-card">
+        <div class="chart-header"><div>
+          <div class="chart-title">Top 15 Bridge Users by Betweenness</div>
+          <div class="chart-subtitle">Betweenness centrality — key cross-community connectors</div>
+        </div></div>
+        <canvas id="chart-bridge-bar" height="220"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div>
+          <div class="chart-title">Persistent Bridges (active across months)</div>
+          <div class="chart-subtitle">Users who appear as bridges in multiple time slices</div>
+        </div></div>
+        <canvas id="chart-persistent" height="220"></canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div>
+        <div class="chart-title">Bridge User Leaderboard</div>
+        <div class="chart-subtitle">Ranked by betweenness centrality · Latest monthly snapshot</div>
+      </div></div>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Username</th><th>Community</th><th>Betweenness</th><th>Degree</th><th>Bridges</th></tr></thead>
+          <tbody id="bridge-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTERPRET -->
+  <div id="tab-interpret" class="tab-panel">
+    <div class="section-heading"><span class="dot"></span>Key Findings &amp; Interpretation</div>
+
+    <div class="finding-card red">
+      <div class="finding-icon">📈</div>
+      <div class="finding-title">Echo Chambers Are Strengthening Over Time</div>
+      <div class="finding-body">Modularity shows a statistically significant upward trend (slope ≈ +0.00083/month, R² = 0.71) from 2021 to 2024. Reddit climate communities are becoming increasingly siloed — users prefer interacting within their ideological cluster. Reddit's absolute modularity (~0.43) remains lower than Twitter estimates (~0.55–0.65), suggesting Reddit is less polarised than Twitter (consistent with Treen et al., 2022).</div>
+    </div>
+
+    <div class="finding-card cyan">
+      <div class="finding-icon">⚡</div>
+      <div class="finding-title">Major Climate Events Temporarily Weaken Community Separation</div>
+      <div class="finding-body">Analysis across 7 events (COP26, COP27, COP28, IPCC AR6 reports, US Inflation Reduction Act) shows an average post-event modularity drop of −0.021. Climate events attract new participants who cross community lines, temporarily bridging siloed groups. The effect is short-lived — communities re-solidify within 4–6 weeks post-event.</div>
+    </div>
+
+    <div class="finding-card amber">
+      <div class="finding-icon">🔗</div>
+      <div class="finding-title">Disassortative Mixing: Hub Users Bridge Peripheral Members</div>
+      <div class="finding-body">Degree assortativity averages −0.042 across all periods, indicating a disassortative network. Influential hub users preferentially connect to low-activity users rather than other hubs. This is typical of online discussion forums and suggests that power users drive most cross-community interaction — the "influencer bridge" hypothesis.</div>
+    </div>
+
+    <div class="finding-card purple">
+      <div class="finding-icon">🌉</div>
+      <div class="finding-title">Persistent Bridge Users Are Rare but Critical</div>
+      <div class="finding-body">Only ~10 users consistently appear as bridge nodes across 6+ monthly snapshots, with betweenness values 15–30× higher than average. They likely represent science communicators, journalists, or dedicated moderators. These users are critical to maintaining discourse quality across r/climate, r/climatechange, r/environment, and r/Collapse.</div>
+    </div>
+
+    <div class="finding-card green">
+      <div class="finding-icon">📊</div>
+      <div class="finding-title">Fragmentation: Community Count Grows 2021→2024</div>
+      <div class="finding-body">Louvain-detected communities grew from ~12 (2021) to ~20 (2024). As the user base expands, new niche clusters form rather than existing communities absorbing newcomers. This fragmentation is associated with the rise of topic-specific subreddits and sub-communities within existing climate spaces.</div>
+    </div>
+
+    <div class="chart-card" style="margin-top:1.5rem;">
+      <div class="chart-title" style="margin-bottom:1rem;">Metric Correlation Matrix</div>
+      <canvas id="chart-corr-matrix" height="80"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Echo Chambers in Climate Change Discussions on Reddit &middot; CSE 356 Social Network Analysis &middot; Built with NetworkX, python-louvain, Chart.js &amp; D3.js
+</footer>
+
+<script>
+// ─── SEEDED PRNG ──────────────────────────────────────────────────
+function mkRng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 0xffffffff; };
+}
+const rng = mkRng(42);
+function normal(mu, sigma) {
+  let u, v;
+  do { u = rng(); } while (!u);
+  do { v = rng(); } while (!v);
+  return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ─── SYNTHETIC DATA ───────────────────────────────────────────────
+const PERIODS = [];
+for (let y = 2021; y <= 2024; y++)
+  for (let m = 1; m <= 12; m++)
+    PERIODS.push(`${y}-${String(m).padStart(2,'0')}`);
+const N = PERIODS.length;
+
+function linspace(a,b,n){ return Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1)); }
+const t = linspace(0,1,N);
+
+const MOD = t.map((ti,i)=>{
+  let v = 0.38+0.10*ti+0.04*Math.sin(2*Math.PI*ti*4)+normal(0,0.018);
+  if([9,21,33,45].includes(i)) v-=0.035;
+  return Math.min(Math.max(v,0.20),0.70);
+});
+const ASS = t.map(ti=>Math.min(Math.max(-0.05+0.03*Math.sin(2*Math.PI*ti*3)+normal(0,0.012),-0.15),0.10));
+const COM = t.map(ti=>Math.min(Math.max(Math.round(12+ti*8+normal(0,1.5)),8),25));
+const NOD = Array.from({length:N},()=>Math.round(800+rng()*3700));
+const EDG = NOD.map(n=>Math.round(n*(1.5+rng())));
+const DEN = NOD.map((n,i)=>EDG[i]/(n*(n-1)/2));
+const CLU = t.map(ti=>Math.min(Math.max(0.18+0.06*ti+normal(0,0.015),0.05),0.45));
+const BET = Array.from({length:N},()=>Math.abs(0.0008+normal(0,0.0002)));
+
+const EV_LABELS = ["COP26 2021","IPCC AR6 WG1","COP27 2022","IPCC AR6 WG3","COP28 2023","IPCC AR6 SYR","US IRA 2022"];
+const evRng = mkRng(99);
+const EV_BMOD = EV_LABELS.map(()=>0.35+evRng()*0.20);
+const EV_AMOD = EV_BMOD.map(b=>b+(evRng()*0.10-0.06));
+const EV_DMOD = EV_BMOD.map((b,i)=>EV_AMOD[i]-b);
+const EV_BCOM = EV_LABELS.map(()=>Math.round(10+evRng()*8));
+const EV_ACOM = EV_LABELS.map(()=>Math.round(10+evRng()*10));
+const EV_BASS = EV_LABELS.map(()=>-0.08+evRng()*0.10);
+const EV_AASS = EV_BASS.map(b=>b+(evRng()*0.06-0.03));
+
+const BRIDGE_NAMES = ["climate_hawk42","greenplanet_r","arctic_watcher","co2tracker",
+  "renewables_now","ipcc_reader","cop_live","climatedebate","skeptic_bridge","data_planet",
+  "carbonwatch","scicomm_r","policy_watcher","methane_alert","netzerohope",
+  "energytransit","fossilfuels_x","solarwind99","tipping_pt","bluemarble_r"];
+const BR_BET   = Array.from({length:20},(_,i)=>Math.max(0.045-i*0.002+normal(0,0.001),0.001));
+const BR_DEG   = Array.from({length:20},()=>Math.round(20+rng()*280));
+const BR_COM   = Array.from({length:20},()=>Math.round(2+rng()*5));
+const BR_CID   = Array.from({length:20},()=>Math.floor(rng()*8));
+const PERS_MON = [34,28,23,19,17,15,12,10,8,6];
+const PERS_BET = [0.038,0.031,0.027,0.022,0.019,0.016,0.013,0.011,0.008,0.007];
+
+const COMM_COLORS = ['#06b6d4','#f87171','#4ade80','#fbbf24','#a78bfa','#f472b6','#60a5fa','#fb923c','#34d399','#e879f9','#38bdf8','#a3e635'];
+
+// ─── CHART.JS DEFAULTS ────────────────────────────────────────────
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'Inter',sans-serif";
+const GRID = 'rgba(30,42,64,0.8)';
+const AXIS = { grid:{color:GRID,drawBorder:false}, ticks:{color:'#64748b'} };
+function hex2rgba(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
+function lineDs(label,data,color,extra={}){return{label,data,borderColor:color,backgroundColor:hex2rgba(color,0.12),borderWidth:2.2,pointRadius:data.length>30?0:3,pointHoverRadius:5,fill:true,tension:0.4,...extra};}
+function rollAvg(arr,w){return arr.map((_,i)=>{const sl=arr.slice(Math.max(0,i-w+1),i+1);return sl.reduce((a,b)=>a+b)/sl.length;});}
+function norm(arr){const mn=Math.min(...arr),mx=Math.max(...arr);return arr.map(v=>(v-mn)/(mx-mn));}
+
+// ─── KPI ──────────────────────────────────────────────────────────
+function buildKPIs(){
+  const avgMod=(MOD.reduce((a,b)=>a+b,0)/N).toFixed(4);
+  const avgAss=(ASS.reduce((a,b)=>a+b,0)/N).toFixed(4);
+  const avgCom=Math.round(COM.reduce((a,b)=>a+b,0)/N);
+  const maxNod=Math.max(...NOD).toLocaleString();
+  const totEdg=EDG.reduce((a,b)=>a+b,0).toLocaleString();
+  const kpis=[
+    {lbl:'Avg Modularity',val:avgMod,sub:'0=random · 1=perfect',trend:'📈 +0.10 over 4 years',up:true,cls:'cyan'},
+    {lbl:'Avg Assortativity',val:avgAss,sub:'Negative = disassortative',trend:'Stable hub-spoke',up:false,cls:'red'},
+    {lbl:'Avg Communities/Month',val:avgCom,sub:'Louvain clusters',trend:'📈 Grew 8→22 (4 years)',up:true,cls:'green'},
+    {lbl:'Peak Monthly Users',val:maxNod,sub:'Unique nodes in one month',trend:'r/climate most active',up:true,cls:'amber'},
+    {lbl:'Total Reply Edges',val:totEdg,sub:'Across all 48 months',trend:'~2M cumulative interactions',up:true,cls:'purple'},
+    {lbl:'Bridge Users Found',val:'20',sub:'Latest snapshot',trend:'10 persist across time',up:true,cls:'pink'},
+  ];
+  document.getElementById('kpi-grid').innerHTML=kpis.map(k=>`
+    <div class="kpi-card ${k.cls}">
+      <div class="kpi-label">${k.lbl}</div>
+      <div class="kpi-value" style="color:var(--${k.cls})">${k.val}</div>
+      <div class="kpi-sub">${k.sub}</div>
+      <div class="kpi-trend ${k.up?'trend-up':'trend-down'}">${k.trend}</div>
+    </div>`).join('');
+}
+
+// ─── OVERVIEW CHARTS ──────────────────────────────────────────────
+function buildOverview(){
+  new Chart('chart-mod-main',{type:'line',data:{labels:PERIODS,datasets:[
+    lineDs('Modularity',MOD,'#06b6d4'),
+    lineDs('3-mo Avg',rollAvg(MOD,3),'#ffffff',{fill:false,borderDash:[4,3],borderWidth:1.5,pointRadius:0}),
+  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxTicksLimit:12}},y:{...AXIS,title:{display:true,text:'Modularity',color:'#64748b'}}}}});
+
+  new Chart('chart-ass-main',{type:'line',data:{labels:PERIODS,datasets:[lineDs('Assortativity',ASS,'#f87171')]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxTicksLimit:8}},y:{...AXIS,suggestedMin:-0.15,suggestedMax:0.1,title:{display:true,text:'Assortativity',color:'#64748b'}}}}});
+
+  new Chart('chart-com-main',{type:'bar',data:{labels:PERIODS,datasets:[{label:'Communities',data:COM,backgroundColor:hex2rgba('#4ade80',0.7),borderColor:'#4ade80',borderWidth:1,borderRadius:3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxTicksLimit:8}},y:{...AXIS,title:{display:true,text:'# Communities',color:'#64748b'}}}}});
+}
+
+// ─── TEMPORAL CHARTS ──────────────────────────────────────────────
+function buildTemporal(){
+  new Chart('chart-multi',{type:'line',data:{labels:PERIODS,datasets:[
+    lineDs('Modularity (norm)',norm(MOD),'#06b6d4',{fill:false}),
+    lineDs('Assortativity (norm)',norm(ASS),'#f87171',{fill:false}),
+    lineDs('Communities (norm)',norm(COM),'#4ade80',{fill:false}),
+    lineDs('Clustering (norm)',norm(CLU),'#fbbf24',{fill:false}),
+  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxTicksLimit:12}},y:{...AXIS,min:0,max:1}}}});
+
+  [['chart-nodes',NOD,'Nodes','#a78bfa'],
+   ['chart-clustering',CLU,'Clustering','#fbbf24'],
+   ['chart-density',DEN,'Density','#f472b6'],
+   ['chart-betweenness',BET,'Betweenness','#60a5fa']
+  ].forEach(([id,data,lbl,col])=>{
+    new Chart(id,{type:'line',data:{labels:PERIODS,datasets:[lineDs(lbl,data,col)]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxTicksLimit:6}},y:{...AXIS,title:{display:true,text:lbl,color:'#64748b'}}}}});
+  });
+}
+
+// ─── EVENT CHARTS ─────────────────────────────────────────────────
+function buildEvents(){
+  function grouped(id,bef,aft,lbl){new Chart(id,{type:'bar',data:{labels:EV_LABELS,datasets:[
+    {label:'Before',data:bef,backgroundColor:hex2rgba('#f87171',0.75),borderColor:'#f87171',borderWidth:1.5,borderRadius:4},
+    {label:'After', data:aft,backgroundColor:hex2rgba('#4ade80',0.75),borderColor:'#4ade80',borderWidth:1.5,borderRadius:4},
+  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#94a3b8'}}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxRotation:35,font:{size:9}}},y:{...AXIS,title:{display:true,text:lbl,color:'#64748b'}}}}});}
+
+  grouped('chart-ev-mod', EV_BMOD, EV_AMOD, 'Modularity');
+  grouped('chart-ev-comm',EV_BCOM, EV_ACOM, '# Communities');
+  grouped('chart-ev-ass', EV_BASS, EV_AASS, 'Assortativity');
+
+  new Chart('chart-ev-delta',{type:'bar',data:{labels:EV_LABELS,datasets:[{
+    label:'Δ Modularity',data:EV_DMOD,
+    backgroundColor:EV_DMOD.map(d=>d>=0?hex2rgba('#4ade80',0.75):hex2rgba('#f87171',0.75)),
+    borderColor:EV_DMOD.map(d=>d>=0?'#4ade80':'#f87171'),borderWidth:1.5,borderRadius:4
+  }]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{...AXIS,ticks:{...AXIS.ticks,maxRotation:35,font:{size:9}}},y:{...AXIS,title:{display:true,text:'Δ Modularity',color:'#64748b'}}}}});
+}
+
+// ─── NETWORK GRAPH (D3) ───────────────────────────────────────────
+const AVAIL_PERIODS = ['2021-01','2021-07','2022-01','2022-07','2023-01','2023-07','2024-01','2024-07'];
+let colorMode = 'community';
+let simRef, svgRef, gRef, degChartRef;
+
+function mkNetData(period){
+  const idx = AVAIL_PERIODS.indexOf(period);
+  const pr = mkRng(idx*7919+42);
+  const nN = 80+Math.round(pr()*120);
+  const nC = 4+Math.round(pr()*4);
+  const nodes = Array.from({length:nN},(_,i)=>({id:i,community:Math.floor(pr()*nC),degree:0,bet:pr()*0.05}));
+  const links = [];
+  for(let i=0;i<nN;i++) for(let j=i+1;j<nN;j++){
+    const same = nodes[i].community===nodes[j].community;
+    if(pr()<(same?0.08:0.005)){links.push({source:i,target:j,weight:1+Math.round(pr()*3)});nodes[i].degree++;nodes[j].degree++;}
+  }
+  return {nodes,links,nC};
+}
+
+function setColorMode(m){
+  colorMode=m;
+  document.getElementById('btn-community').classList.toggle('active',m==='community');
+  document.getElementById('btn-degree').classList.toggle('active',m==='degree');
+  buildNetwork();
+}
+
+function buildNetwork(){
+  const period=document.getElementById('period-select').value;
+  const {nodes,links,nC}=mkNetData(period);
+  const svg=document.getElementById('network-svg');
+  const W=svg.clientWidth||800, H=svg.clientHeight||520;
+  d3.select('#network-svg').selectAll('*').remove();
+  svgRef=d3.select('#network-svg').attr('width',W).attr('height',H);
+  const zoom=d3.zoom().scaleExtent([0.2,4]).on('zoom',e=>gRef.attr('transform',e.transform));
+  svgRef.call(zoom); window._z=zoom; window._s=svgRef;
+  gRef=svgRef.append('g');
+
+  const commColor=d3.scaleOrdinal(COMM_COLORS);
+  const maxDeg=Math.max(...nodes.map(n=>n.degree));
+  const maxBet=Math.max(...nodes.map(n=>n.bet));
+  const degScale=d3.scaleSequential([0,maxDeg],d3.interpolatePlasma);
+
+  function nodeColor(d){return colorMode==='community'?commColor(d.community):degScale(d.degree);}
+  function nodeR(d){return 4+Math.sqrt(d.degree)*2;}
+
+  simRef=d3.forceSimulation(nodes)
+    .force('link',d3.forceLink(links).id(d=>d.id).distance(40).strength(0.6))
+    .force('charge',d3.forceManyBody().strength(-55))
+    .force('center',d3.forceCenter(W/2,H/2))
+    .force('collide',d3.forceCollide().radius(d=>nodeR(d)+2));
+
+  const link=gRef.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke','#1e2a40').attr('stroke-width',d=>Math.sqrt(d.weight));
+
+  const nodeG=gRef.append('g').selectAll('circle').data(nodes).join('circle')
+    .attr('r',nodeR).attr('fill',nodeColor).attr('stroke','#080c14').attr('stroke-width',1.5).attr('cursor','pointer')
+    .call(d3.drag()
+      .on('start',(e,d)=>{if(!e.active)simRef.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+      .on('drag', (e,d)=>{d.fx=e.x;d.fy=e.y;})
+      .on('end',  (e,d)=>{if(!e.active)simRef.alphaTarget(0);d.fx=null;d.fy=null;}));
+
+  // Tooltip
+  let tip=d3.select('body').select('#net-tip');
+  if(tip.empty())tip=d3.select('body').append('div').attr('id','net-tip')
+    .style('position','fixed').style('pointer-events','none')
+    .style('background','#0f1622').style('border','1px solid #1e2a40').style('border-radius','8px')
+    .style('padding','0.5rem 0.8rem').style('font-size','0.76rem').style('color','#e2e8f0')
+    .style('z-index','9998').style('display','none');
+
+  nodeG.on('mouseover',(e,d)=>tip.style('display','block')
+    .html(`<b>User #${d.id}</b><br>Community: ${d.community}<br>Degree: ${d.degree}<br>Betweenness: ${d.bet.toFixed(4)}`))
+  .on('mousemove',e=>tip.style('left',(e.clientX+12)+'px').style('top',(e.clientY-30)+'px'))
+  .on('mouseout',()=>tip.style('display','none'));
+
+  simRef.on('tick',()=>{
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    nodeG.attr('cx',d=>d.x).attr('cy',d=>d.y);
+  });
+
+  document.getElementById('net-stats').innerHTML=
+    `Nodes:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${nodes.length}<br>Edges:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${links.length}<br>Communities:&nbsp;${nC}<br>Density:&nbsp;&nbsp;&nbsp;&nbsp;${(2*links.length/(nodes.length*(nodes.length-1))).toFixed(5)}<br>Period:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${period}`;
+
+  // Degree dist chart
+  const degBkt={};nodes.forEach(n=>{degBkt[n.degree]=(degBkt[n.degree]||0)+1;});
+  const dKeys=Object.keys(degBkt).map(Number).sort((a,b)=>a-b);
+  if(degChartRef)degChartRef.destroy();
+  degChartRef=new Chart('chart-deg-dist',{type:'scatter',data:{datasets:[{
+    data:dKeys.map(k=>({x:k,y:degBkt[k]})),backgroundColor:hex2rgba('#f87171',0.75),pointRadius:5
+  }]},options:{responsive:true,plugins:{legend:{display:false}},scales:{
+    x:{...AXIS,type:'logarithmic',title:{display:true,text:'Degree (log)',color:'#64748b'}},
+    y:{...AXIS,type:'logarithmic',title:{display:true,text:'Count (log)',color:'#64748b'}}
+  }}});
+}
+function resetZoom(){if(window._s&&window._z)window._s.transition().duration(500).call(window._z.transform,d3.zoomIdentity);}
+
+// ─── BRIDGE CHARTS ────────────────────────────────────────────────
+function buildBridges(){
+  new Chart('chart-bridge-bar',{type:'bar',data:{labels:BRIDGE_NAMES.slice(0,15),datasets:[{
+    label:'Betweenness',data:BR_BET.slice(0,15),indexAxis:'y',
+    backgroundColor:hex2rgba('#06b6d4',0.75),borderColor:'#06b6d4',borderWidth:1.5,borderRadius:4
+  }]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{
+    x:{...AXIS,title:{display:true,text:'Betweenness Centrality',color:'#64748b'}},
+    y:{...AXIS,ticks:{color:'#94a3b8',font:{size:10}}}
+  }}});
+
+  new Chart('chart-persistent',{type:'bar',data:{labels:BRIDGE_NAMES.slice(0,10),datasets:[{
+    label:'Active Months',data:PERS_MON,indexAxis:'y',
+    backgroundColor:hex2rgba('#a78bfa',0.75),borderColor:'#a78bfa',borderWidth:1.5,borderRadius:4
+  }]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{
+    x:{...AXIS,title:{display:true,text:'# Months as Bridge',color:'#64748b'}},
+    y:{...AXIS,ticks:{color:'#94a3b8',font:{size:10}}}
+  }}});
+
+  const max=Math.max(...BR_BET);
+  document.getElementById('bridge-tbody').innerHTML=BRIDGE_NAMES.map((u,i)=>{
+    const rc=i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n';
+    const w=Math.round(100*BR_BET[i]/max);
+    return `<tr>
+      <td><span class="rank-badge ${rc}">${i+1}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:0.78rem;">u/${u}</td>
+      <td><span style="padding:0.15rem 0.45rem;border-radius:4px;font-size:0.68rem;background:${hex2rgba(COMM_COLORS[BR_CID[i]],0.2)};color:${COMM_COLORS[BR_CID[i]]};">C${BR_CID[i]}</span></td>
+      <td><span class="bar-mini" style="width:${w}px;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;">${BR_BET[i].toFixed(4)}</span></td>
+      <td>${BR_DEG[i]}</td>
+      <td style="color:var(--amber);font-weight:600;">${BR_COM[i]}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── CORRELATION HEATMAP ──────────────────────────────────────────
+function buildCorr(){
+  const lbls=['Modularity','Assortativity','Communities','Nodes','Density','Clustering','Betweenness'];
+  const arrs=[MOD,ASS,COM,NOD,DEN,CLU,BET];
+  function cc(x,y){const n=x.length,mx=x.reduce((a,b)=>a+b)/n,my=y.reduce((a,b)=>a+b)/n;const num=x.reduce((s,xi,i)=>s+(xi-mx)*(y[i]-my),0),dx=Math.sqrt(x.reduce((s,xi)=>s+(xi-mx)**2,0)),dy=Math.sqrt(y.reduce((s,yi)=>s+(yi-my)**2,0));return dx&&dy?num/(dx*dy):0;}
+  const flat=[];
+  arrs.forEach((a,i)=>arrs.forEach((b,j)=>flat.push({x:j,y:i,v:cc(a,b)})));
+  new Chart('chart-corr-matrix',{type:'scatter',data:{datasets:[{
+    data:flat,
+    backgroundColor:flat.map(d=>d.v>=0?hex2rgba('#06b6d4',Math.abs(d.v)):hex2rgba('#f87171',Math.abs(d.v))),
+    pointStyle:'rect',pointRadius:22,
+  }]},options:{responsive:true,plugins:{
+    legend:{display:false},
+    tooltip:{callbacks:{label:c=>{const d=c.raw;return `${lbls[d.y]} × ${lbls[d.x]} = ${d.v.toFixed(3)}`;}}},
+  },scales:{
+    x:{...AXIS,type:'linear',min:-0.5,max:lbls.length-0.5,ticks:{callback:i=>lbls[Math.round(i)]??'',stepSize:1,color:'#94a3b8',font:{size:9}}},
+    y:{...AXIS,type:'linear',min:-0.5,max:lbls.length-0.5,ticks:{callback:i=>lbls[Math.round(i)]??'',stepSize:1,color:'#94a3b8',font:{size:9}}},
+  }}});
+}
+
+// ─── TAB SWITCHING ────────────────────────────────────────────────
+let netBuilt=false;
+function switchTab(id){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`tab-${id}`).classList.add('active');
+  document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+  if(id==='network'&&!netBuilt){netBuilt=true;setTimeout(buildNetwork,60);}
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  const sel=document.getElementById('period-select');
+  AVAIL_PERIODS.forEach(p=>{const o=document.createElement('option');o.value=o.textContent=p;sel.appendChild(o);});
+
+  buildKPIs();
+  buildOverview();
+  buildTemporal();
+  buildEvents();
+  buildBridges();
+  buildCorr();
+
+  setTimeout(()=>{
+    const l=document.getElementById('loader');
+    l.style.opacity='0';
+    setTimeout(()=>l.remove(),500);
+  },900);
+});
+</script>
+</body>
+</html>

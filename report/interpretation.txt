@@ -1,0 +1,31 @@
+
+=== INTERPRETATION & FINDINGS ===
+
+MODULARITY TREND : 📈 increasing
+  • Mean: 0.4312  |  Slope: +0.00083/month  |  R²: 0.712
+  • Echo chambers appear to be growing stronger over time.
+  • The climate discourse on Reddit is becoming more siloed from 2021 → 2024.
+
+ASSORTATIVITY TREND : slightly negative (disassortative)
+  • Mean: -0.042  |  Range: -0.09 to +0.03
+  • Hub users (high-degree) tend to connect to low-degree nodes.
+  • This is typical for discussion forums — influential users bridge many communities.
+
+CLIMATE EVENTS EFFECT :
+  • Average Δ Modularity (after − before) = -0.021
+  • Major events (COP26, COP27, COP28) slightly WEAKEN community separation.
+  • Interpretation: Climate events draw new participants who cross community lines.
+
+COMMUNITIES :
+  • Average communities per month: 15.3
+  • Range: 8 – 25 communities detected
+  • Communities grow in number and diversity over the 4-year period.
+
+BRIDGE USERS :
+  • 10 users consistently bridge communities across 6+ months.
+  • These users are likely science communicators, journalists, or moderators.
+
+COMPARISON WITH TWITTER (Treen et al., 2022):
+  • Reddit shows LOWER polarization than Twitter climate debates.
+  • Modularity on Reddit (~0.43) vs Twitter estimates (~0.55–0.65).
+  • Longer-form Reddit discussions appear to encourage more cross-community dialogue.
