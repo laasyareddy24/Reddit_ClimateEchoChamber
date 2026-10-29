@@ -224,6 +224,8 @@ den_js       = series_to_js(temp["density"])
 clu_js       = series_to_js(temp["avg_clustering"])
 bet_js       = series_to_js(temp["mean_betweenness"])
 
+edg_js       = series_to_js(temp["num_edges"].astype(int))
+
 ev_labels_js = str(list(ev.index)).replace("'",'"')
 
 def ev_col(col):
@@ -261,6 +263,12 @@ n_periods = len(temp)
 n_subs    = len(SUBREDDITS)
 
 real_data_js = f"""
+function mkRng(seed) {{
+  let s = seed >>> 0;
+  return () => {{ s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 0xffffffff; }};
+}}
+const COMM_COLORS = ['#06b6d4','#f87171','#4ade80','#fbbf24','#a78bfa','#f472b6','#60a5fa','#fb923c','#34d399','#e879f9','#38bdf8','#a3e635'];
+
 // ═══════════════════════════════════════════════════
 //  REAL DATA — injected by run_full_pipeline.py
 //  Subreddits: {SUBREDDITS}   Period: {START_DATE}–{END_DATE}
@@ -271,6 +279,7 @@ const MOD = {mod_js};
 const ASS = {ass_js};
 const COM = {com_js};
 const NOD = {nod_js};
+const EDG = {edg_js};
 const DEN = {den_js};
 const CLU = {clu_js};
 const BET = {bet_js};
@@ -339,6 +348,10 @@ new_html = new_html.replace(
 new_html = new_html.replace(
     'class="badge badge-green">4 Subreddits',
     f'class="badge badge-green">{n_subs} Subreddits'
+# Strip duplicate AVAIL_PERIODS declaration
+new_html = new_html.replace(
+    "const AVAIL_PERIODS = ['2021-01','2021-07','2022-01','2022-07','2023-01','2023-07','2024-01','2024-07'];",
+    "// AVAIL_PERIODS declared above"
 )
 
 out_html = Path(__file__).parent / "dashboard_real.html"
